@@ -1,51 +1,47 @@
 # Azure Production Network Setup Guide
 
-## Overview
+![Architecture](images/architecture.png)
 
-This document explains how to manually create a production-grade Azure networking setup using:
-
-- Resource Group
-- Virtual Network (VNET)
-- Public Subnet
-- Private Subnet
-- Network Security Groups (NSG)
-- Route Tables
-- NAT Gateway
-- Public and Private Virtual Machines
-
----
-
-# Final Architecture
+## Architecture Overview
 
 ```text
-Resource Group
-│
-└── VNet (10.0.0.0/16)
-    │
-    ├── Public Subnet  (10.0.1.0/24)
-    │     ├── NSG-Public
-    │     ├── RouteTable-Public
-    │     └── Bastion / Load Balancer / Jump Server
-    │
-    └── Private Subnet (10.0.2.0/24)
-          ├── NSG-Private
-          ├── RouteTable-Private
-          └── Backend APIs / DB / Redis / AKS
+Internet
+   │
+   ▼
+Application Gateway / Load Balancer
+   │
+   ▼
+Public Subnet (10.0.1.0/24)
+   │
+   ├── Bastion VM
+   ├── Public VM
+   ├── Public NSG
+   └── Public Route Table
+   │
+   ▼
+Private Subnet (10.0.2.0/24)
+   │
+   ├── Backend VM
+   ├── Database
+   ├── Redis
+   ├── Private NSG
+   └── Private Route Table
+   │
+   ▼
+NAT Gateway (Outbound Internet Only)
 ```
 
 ---
 
-# STEP 1 — Create Resource Group
+# Step 1 — Create Resource Group
 
-## Login
+## Azure Portal
 
-Open Azure Portal:
+Open:
 
+```text
 https://portal.azure.com
-
----
-
-## Create Resource Group
+```
 
 Search:
 
@@ -59,7 +55,7 @@ Click:
 Create
 ```
 
-Fill:
+Fill the details:
 
 | Field | Value |
 |---|---|
@@ -75,7 +71,7 @@ Review + Create
 
 ---
 
-# STEP 2 — Create Virtual Network (VNET)
+# Step 2 — Create Virtual Network (VNET)
 
 Search:
 
@@ -89,9 +85,7 @@ Click:
 Create
 ```
 
----
-
-## Basics Tab
+## Basics
 
 | Field | Value |
 |---|---|
@@ -101,11 +95,11 @@ Create
 
 ---
 
-## IP Addresses Tab
+## IP Address Space
 
-Remove default subnet.
+Remove the default subnet.
 
-Set Address Space:
+Set:
 
 ```text
 10.0.0.0/16
@@ -113,9 +107,7 @@ Set Address Space:
 
 ---
 
-# STEP 3 — Create Public Subnet
-
-Inside VNET creation:
+# Step 3 — Create Public Subnet
 
 Click:
 
@@ -138,7 +130,7 @@ Add
 
 ---
 
-# STEP 4 — Create Private Subnet
+# Step 4 — Create Private Subnet
 
 Again click:
 
@@ -159,7 +151,7 @@ Click:
 Add
 ```
 
-Then click:
+Then:
 
 ```text
 Review + Create
@@ -167,7 +159,7 @@ Review + Create
 
 ---
 
-# STEP 5 — Create Public NSG
+# Step 5 — Create Public NSG
 
 Search:
 
@@ -189,39 +181,29 @@ Fill:
 | Resource Group | prod-rg |
 | Region | Central India |
 
-Click:
-
-```text
-Review + Create
-```
+Create the NSG.
 
 ---
 
-# STEP 6 — Configure Public NSG Rules
+# Step 6 — Configure Public NSG Rules
 
 Open:
 
 ```text
 public-nsg
-→ Inbound security rules
+→ Inbound Security Rules
 → Add
 ```
-
----
 
 ## Allow SSH
 
 | Field | Value |
 |---|---|
-| Source | Any |
-| Source Port Ranges | * |
-| Destination | Any |
 | Service | SSH |
 | Port | 22 |
 | Protocol | TCP |
 | Action | Allow |
 | Priority | 100 |
-| Name | allow-ssh |
 
 ---
 
@@ -231,7 +213,8 @@ public-nsg
 |---|---|
 | Service | HTTP |
 | Port | 80 |
-| Name | allow-http |
+| Action | Allow |
+| Priority | 110 |
 
 ---
 
@@ -241,11 +224,12 @@ public-nsg
 |---|---|
 | Service | HTTPS |
 | Port | 443 |
-| Name | allow-https |
+| Action | Allow |
+| Priority | 120 |
 
 ---
 
-# STEP 7 — Create Private NSG
+# Step 7 — Create Private NSG
 
 Create another NSG.
 
@@ -257,13 +241,11 @@ Create another NSG.
 
 ---
 
-# STEP 8 — Configure Private NSG Rules
+# Step 8 — Configure Private NSG Rules
 
-Private subnet should not allow direct internet traffic.
+Private subnet should not allow public internet traffic.
 
-Allow only internal communication.
-
-## Example Rules
+Allow only:
 
 | Source | Port | Action |
 |---|---|---|
@@ -277,11 +259,9 @@ Do NOT allow:
 0.0.0.0/0
 ```
 
-for private servers.
-
 ---
 
-# STEP 9 — Associate NSGs to Subnets
+# Step 9 — Associate NSGs to Subnets
 
 Go to:
 
@@ -293,13 +273,7 @@ Virtual Networks
 
 ---
 
-## Attach Public NSG
-
-Select:
-
-```text
-public-subnet
-```
+## Public Subnet
 
 Attach:
 
@@ -307,17 +281,15 @@ Attach:
 public-nsg
 ```
 
-Save.
+to:
+
+```text
+public-subnet
+```
 
 ---
 
-## Attach Private NSG
-
-Select:
-
-```text
-private-subnet
-```
+## Private Subnet
 
 Attach:
 
@@ -325,11 +297,15 @@ Attach:
 private-nsg
 ```
 
-Save.
+to:
+
+```text
+private-subnet
+```
 
 ---
 
-# STEP 10 — Create Public Route Table
+# Step 10 — Create Public Route Table
 
 Search:
 
@@ -353,7 +329,7 @@ Fill:
 
 ---
 
-# STEP 11 — Configure Public Route
+# Step 11 — Configure Public Route
 
 Open:
 
@@ -368,41 +344,32 @@ Add:
 | Field | Value |
 |---|---|
 | Route Name | internet-route |
-| Destination Type | IP Addresses |
 | Destination CIDR | 0.0.0.0/0 |
 | Next Hop Type | Internet |
 
-This means:
-
-```text
-All traffic goes to the internet.
-```
+This route sends traffic to internet.
 
 ---
 
-# STEP 12 — Associate Public Route Table
+# Step 12 — Associate Public Route Table
 
-Go to:
+Attach:
 
 ```text
 public-rt
-→ Subnets
-→ Associate
 ```
 
-Select:
+to:
 
 ```text
 public-subnet
 ```
 
-Save.
-
 ---
 
-# STEP 13 — Create Private Route Table
+# Step 13 — Create Private Route Table
 
-Create another Route Table.
+Create another route table.
 
 | Field | Value |
 |---|---|
@@ -411,37 +378,17 @@ Create another Route Table.
 
 ---
 
-# STEP 14 — Configure Private Route Table
+# Step 14 — Configure Private Route Table
 
-## Option 1 — No Internet Access
+## Recommended Production Setup
 
-Do not add:
+Use NAT Gateway for outbound internet.
 
-```text
-0.0.0.0/0
-```
-
-This keeps the subnet fully private.
+Private servers should not have Public IP.
 
 ---
 
-## Option 2 — NAT Gateway (Recommended)
-
-Private servers can access internet outbound only.
-
-Examples:
-
-```bash
-apt update
-pip install
-Docker pull
-```
-
-Internet cannot directly access private servers.
-
----
-
-# STEP 15 — Create NAT Gateway
+# Step 15 — Create NAT Gateway
 
 Search:
 
@@ -467,15 +414,17 @@ Fill:
 
 ## Attach Public IP
 
-Create or select:
+Create:
 
 ```text
 Public IP Address
 ```
 
+Attach the Public IP to NAT Gateway.
+
 ---
 
-## Associate NAT Gateway to Private Subnet
+## Associate NAT Gateway
 
 Go to:
 
@@ -494,7 +443,7 @@ Save.
 
 ---
 
-# STEP 16 — Associate Private Route Table
+# Step 16 — Associate Private Route Table
 
 Attach:
 
@@ -510,18 +459,31 @@ private-subnet
 
 ---
 
-# STEP 17 — Create Bastion / Jump VM
+# Step 17 — Create Public VM
 
-Create VM.
+Search:
+
+```text
+Virtual Machines
+```
+
+Click:
+
+```text
+Create
+→ Azure Virtual Machine
+```
+
+---
 
 ## Basics
 
 | Field | Value |
 |---|---|
 | VM Name | bastion-vm |
-| Region | Central India |
 | Image | Ubuntu 22.04 |
 | Size | Standard_B2s |
+| Authentication | SSH Key |
 
 ---
 
@@ -529,22 +491,20 @@ Create VM.
 
 | Field | Value |
 |---|---|
-| Virtual Network | prod-vnet |
+| VNET | prod-vnet |
 | Subnet | public-subnet |
 | Public IP | Enabled |
 | NSG | public-nsg |
 
-This VM acts as:
-
-```text
-Jump Server / Bastion Host
-```
+Create VM.
 
 ---
 
-# STEP 18 — Create Backend VM
+# Step 18 — Create Backend VM
 
 Create another VM.
+
+---
 
 ## Basics
 
@@ -560,30 +520,45 @@ Create another VM.
 
 | Field | Value |
 |---|---|
-| Virtual Network | prod-vnet |
+| VNET | prod-vnet |
 | Subnet | private-subnet |
 | Public IP | Disabled |
 | NSG | private-nsg |
 
-Important:
+Create VM.
+
+---
+
+# Traffic Flow
 
 ```text
-Do NOT expose backend or DB directly to internet.
+User
+  │
+  ▼
+Public IP
+  │
+  ▼
+Public VM / Load Balancer
+  │
+  ▼
+Private Backend VM
+  │
+  ▼
+Database / Redis
 ```
 
 ---
 
-# Production Best Practices
+# Production Security Best Practices
 
 ## Public Subnet
 
 Use for:
 
-- Load Balancer
 - Bastion Host
+- Load Balancer
+- Application Gateway
 - Reverse Proxy
-- Firewall
-- NAT Gateway
 
 ---
 
@@ -595,11 +570,11 @@ Use for:
 - Databases
 - Redis
 - Kubernetes Worker Nodes
-- AI/ML Servers
+- AI/ML Services
 
 ---
 
-# Security Best Practices
+# Important Security Rules
 
 ## Never Do This
 
@@ -609,11 +584,11 @@ Use for:
 0.0.0.0/0
 ```
 
-❌ Put databases in public subnet.
+❌ Put database in Public Subnet
 
-❌ Keep SSH open publicly forever.
+❌ Expose Backend VM to Internet
 
-❌ Expose backend directly to internet.
+❌ Allow unrestricted SSH access
 
 ---
 
@@ -622,7 +597,7 @@ Use for:
 ```text
 Internet
    │
-Application Gateway / Load Balancer
+Azure Application Gateway
    │
 Public Subnet
    │
@@ -633,29 +608,11 @@ Database Subnet
 
 ---
 
-# Example Architecture for Backend Deployment
-
-```text
-Users
-  │
-Azure Application Gateway
-  │
-Public Subnet
-  │
-Backend API Servers
-(Private Subnet)
-  │
-PostgreSQL / Redis
-(Private Subnet)
-```
-
----
-
 # CIDR Reference
 
 | CIDR | Meaning |
 |---|---|
-| 10.0.0.0/16 | Large VNET |
+| 10.0.0.0/16 | VNET |
 | 10.0.1.0/24 | Public Subnet |
 | 10.0.2.0/24 | Private Subnet |
 
@@ -666,46 +623,44 @@ PostgreSQL / Redis
 | Component | Purpose |
 |---|---|
 | VNET | Private Network |
-| Subnet | Smaller network inside VNET |
+| Subnet | Network Segment |
 | NSG | Firewall |
-| Route Table | Traffic routing |
-| NAT Gateway | Outbound internet access |
-| Public IP | Internet access |
-| Bastion | Secure SSH access |
+| Route Table | Traffic Routing |
+| NAT Gateway | Outbound Internet |
+| Public IP | Internet Access |
+| Bastion VM | Secure SSH Access |
 
 ---
 
-# Recommended Next Steps
-
-After networking setup:
-
-1. Configure Azure Load Balancer
-2. Configure Azure Application Gateway
-3. Setup Azure Bastion
-4. Setup CI/CD Pipeline
-5. Configure HTTPS SSL
-6. Configure Azure Monitor
-7. Setup Backup & Disaster Recovery
-8. Configure WAF Firewall
-9. Setup Auto Scaling
-10. Configure Kubernetes / AKS
-
----
-
-# Useful Azure Documentation
+# Useful Azure Links
 
 Azure Portal:
-https://portal.azure.com
 
-Azure Virtual Network:
+```text
+https://portal.azure.com
+```
+
+Azure VNET:
+
+```text
 https://learn.microsoft.com/en-us/azure/virtual-network/
+```
 
 Azure NSG:
+
+```text
 https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview
+```
 
 Azure Route Tables:
+
+```text
 https://learn.microsoft.com/en-us/azure/virtual-network/manage-route-table
+```
 
 Azure NAT Gateway:
+
+```text
 https://learn.microsoft.com/en-us/azure/nat-gateway/nat-overview
+```
 
