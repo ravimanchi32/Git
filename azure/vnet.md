@@ -1,6 +1,6 @@
 # Azure Production Network Setup Guide
 
-![Architecture](images/architecture.png)
+![Architecture](architecture.png)
 
 ## Architecture Overview
 
