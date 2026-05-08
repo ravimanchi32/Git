@@ -390,6 +390,42 @@ Private servers should not have Public IP.
 
 # Step 15 — Create NAT Gateway
 
+A NAT Gateway allows private subnet resources to access the internet outbound only.
+
+Example:
+
+- apt update
+- docker pull
+- pip install
+
+Internet users cannot directly access private VMs.
+
+---
+
+# NAT Gateway Architecture
+
+```text
+Private VM
+   │
+Private Subnet
+   │
+NAT Gateway
+   │
+Public IP
+   │
+Internet
+```
+
+---
+
+# STEP 15.1 — Search NAT Gateway
+
+Open Azure Portal:
+
+```text
+https://portal.azure.com
+```
+
 Search:
 
 ```text
@@ -402,44 +438,137 @@ Click:
 Create
 ```
 
-Fill:
+---
+
+# STEP 15.2 — Basics Tab
+
+Fill the details:
 
 | Field | Value |
 |---|---|
-| Name | prod-nat |
+| Subscription | Your Subscription |
 | Resource Group | prod-rg |
+| NAT Gateway Name | prod-nat |
 | Region | Central India |
+| Availability Zone | None |
+
+Click:
+
+```text
+Next: Outbound IP
+```
 
 ---
 
-## Attach Public IP
+# STEP 15.3 — Configure Outbound Public IP
 
-Create:
-
-```text
-Public IP Address
-```
-
-Attach the Public IP to NAT Gateway.
+NAT Gateway requires a Public IP for outbound internet traffic.
 
 ---
 
-## Associate NAT Gateway
-
-Go to:
+## Click
 
 ```text
-Subnets
-→ Associate
+Create new Public IP address
 ```
 
-Select:
+---
+
+## Fill Public IP Details
+
+| Field | Value |
+|---|---|
+| Name | prod-nat-ip |
+| SKU | Standard |
+| Assignment | Static |
+| Availability Zone | Zone-redundant (Optional) |
+
+Click:
+
+```text
+OK
+```
+
+Now the Public IP is attached to the NAT Gateway.
+
+---
+
+# STEP 15.4 — Associate NAT Gateway with Private Subnet
+
+This is the MOST IMPORTANT step.
+
+Click:
+
+```text
+Next: Subnet
+```
+
+---
+
+## Select Virtual Network
+
+| Field | Value |
+|---|---|
+| Virtual Network | prod-vnet |
+
+---
+
+## Select Subnet
+
+Check:
 
 ```text
 private-subnet
 ```
 
-Save.
+Example:
+
+```text
+☑ private-subnet (10.0.2.0/24)
+```
+
+This means:
+
+```text
+All VMs inside private-subnet use NAT Gateway for outbound internet access.
+```
+
+---
+
+# STEP 15.5 — Review + Create
+
+Click:
+
+```text
+Review + Create
+```
+
+Then click:
+
+```text
+Create
+```
+
+Deployment usually takes 1–3 minutes.
+
+---
+
+# Verify NAT Gateway Association
+
+Go to:
+
+```text
+Virtual Networks
+→ prod-vnet
+→ Subnets
+→ private-subnet
+```
+
+You should see:
+
+| Field | Value |
+|---|---|
+| NAT Gateway | prod-nat |
 
 ---
 
